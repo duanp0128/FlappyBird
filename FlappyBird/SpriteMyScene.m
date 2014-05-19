@@ -17,6 +17,8 @@
     SKNode *_moving;
     SKNode *_pipes;
     BOOL _canRestart;
+    SKLabelNode* _scoreLabelNode;
+    NSInteger _score;
 }
 @end
 
@@ -25,6 +27,7 @@
 static const uint32_t birdCategory = 1 << 0;
 static const uint32_t worldCategory = 1 << 1;
 static const uint32_t pipeCategory = 1 << 2;
+static const uint32_t scoreCategory = 1 << 3;
 static NSInteger const kVerticalPipeGap = 150;
 
 -(id)initWithSize:(CGSize)size {    
@@ -120,6 +123,14 @@ static NSInteger const kVerticalPipeGap = 150;
         SKAction *spawnThenDelay = [SKAction sequence:@[spawn, delay]];
         SKAction *spawnThenDelayForever = [SKAction repeatActionForever:spawnThenDelay];
         [self runAction:spawnThenDelayForever];
+        
+        //Initialize label and creat a label which holds the score
+        _score = 0;
+        _scoreLabelNode = [SKLabelNode labelNodeWithFontNamed:@"ChalkboardSE-Bold"];
+        _scoreLabelNode.position = CGPointMake(CGRectGetMidX(self.frame), 3*self.frame.size.height/4);
+        _scoreLabelNode.zPosition = 100;
+        _scoreLabelNode.text = [NSString stringWithFormat:@"%d",_score];
+        [self addChild:_scoreLabelNode];
     }
     return self;
 }
@@ -157,6 +168,10 @@ CGFloat clamp(CGFloat min, CGFloat max, CGFloat value) {
     
     //restart annimation
     _moving.speed = 1;
+    
+    //reset score
+    _score = 0;
+    _scoreLabelNode.text = [NSString stringWithFormat:@"%d",_score];
 }
 
 -(void)spawnPipes {
@@ -183,6 +198,15 @@ CGFloat clamp(CGFloat min, CGFloat max, CGFloat value) {
     pipe2.physicsBody.contactTestBitMask = birdCategory;
     [pipePair addChild:pipe2];
     
+    //score increment detection
+    SKNode* contactNode = [SKNode node];
+    contactNode.position = CGPointMake(pipe1.size.width+_bird.size.width/2, CGRectGetMidY(self.frame));
+    contactNode.physicsBody = [SKPhysicsBody bodyWithRectangleOfSize:CGSizeMake(pipe1.size.width, self.frame.size.height)];
+    contactNode.physicsBody.dynamic = NO;
+    contactNode.physicsBody.categoryBitMask =scoreCategory;
+    contactNode.physicsBody.contactTestBitMask = birdCategory;
+    [pipePair addChild:contactNode];
+    
     [pipePair runAction:_moveAndRemovePipes];
     [_pipes addChild:pipePair];
 //    [self addChild:pipePair];
@@ -196,16 +220,24 @@ CGFloat clamp(CGFloat min, CGFloat max, CGFloat value) {
 
 -(void)didBeginContact:(SKPhysicsContact *)contact {
     if(_moving.speed > 0) {
-        _moving.speed = 0;
-        
-        [self removeActionForKey:@"flash"];
-        [self runAction:[SKAction sequence:@[[SKAction repeatAction:[SKAction sequence:@[[SKAction runBlock:^{
-            self.backgroundColor = [SKColor redColor];
-        }], [SKAction waitForDuration:0.05], [SKAction runBlock:^{
-            self.backgroundColor = _skyColor;
-        }], [SKAction waitForDuration:0.05]]] count:4], [SKAction runBlock:^{
-            _canRestart = YES;
-        }]]] withKey:@"flash"];
+        if ((contact.bodyA.categoryBitMask&scoreCategory)==scoreCategory || (contact.bodyB.categoryBitMask&scoreCategory)==scoreCategory) {
+            _score++;
+            _scoreLabelNode.text = [NSString stringWithFormat:@"%d",_score];
+            
+            //add a little visual feedback for the score increment
+            [_scoreLabelNode runAction:[SKAction sequence:@[[SKAction scaleTo:2.0 duration:0.1],[SKAction scaleTo:1.0 duration:0.1]]]];
+        } else {
+            _moving.speed = 0;
+            
+            [self removeActionForKey:@"flash"];
+            [self runAction:[SKAction sequence:@[[SKAction repeatAction:[SKAction sequence:@[[SKAction runBlock:^{
+                self.backgroundColor = [SKColor redColor];
+            }], [SKAction waitForDuration:0.05], [SKAction runBlock:^{
+                self.backgroundColor = _skyColor;
+            }], [SKAction waitForDuration:0.05]]] count:4], [SKAction runBlock:^{
+                _canRestart = YES;
+            }]]] withKey:@"flash"];
+        }
     }
 }
 
